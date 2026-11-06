@@ -29,12 +29,20 @@ func NewClient(opts ...ClientOption) *Client {
 
 // ClientConfig is the configuration for the Client.
 type ClientConfig struct {
-	Domain     string
-	HTTPClient *http.Client
+	Domain      string
+	HTTPClient  *http.Client
+	AccessToken string
 }
 
 // ClientOption is a function that configures the Client.
 type ClientOption func(*ClientConfig)
+
+// WithAccessToken sets the access token for the Client.
+func WithAccessToken(accessToken string) ClientOption {
+	return func(c *ClientConfig) {
+		c.AccessToken = accessToken
+	}
+}
 
 // WithDomain sets the domain for the Client.
 func WithDomain(domain string) ClientOption {
@@ -86,6 +94,10 @@ func (c *Client) GetContacts(ctx context.Context, GetContactsOptions GetContacts
 			request, err := http.NewRequestWithContext(ctx, http.MethodGet, nextPageURL, nil)
 			if err != nil {
 				return fmt.Errorf("could not create request: %w", err)
+			}
+
+			if c.config.AccessToken != "" {
+				request.Header.Set("Authorization", "Bearer "+c.config.AccessToken)
 			}
 
 			response, err := c.config.HTTPClient.Do(request)
