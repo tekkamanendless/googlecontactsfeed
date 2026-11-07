@@ -32,6 +32,7 @@ type GoogleContact struct {
 	Category             Category           `xml:"category"`
 	Title                string             `xml:"title,omitempty"` // This is read-only.
 	Links                []Link             `xml:"link"`
+	Deleted              bool               `xml:"http://schemas.google.com/g/2005 deleted"` // This will be set if "showdeleted" is true and the contact was deleted.
 	Name                 GDName             `xml:"http://schemas.google.com/g/2005 name"`
 	GDEmails             []GDEmail          `xml:"http://schemas.google.com/g/2005 email"`
 	GDPhoneNumbers       []GDPhoneNumber    `xml:"http://schemas.google.com/g/2005 phoneNumber"`

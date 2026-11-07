@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"time"
 )
 
 // Client is a client for the legacy Google Contacts API.
@@ -62,11 +63,11 @@ func WithHTTPClient(httpClient *http.Client) ClientOption {
 //
 // See: https://developers.google.com/workspace/admin/domain-shared-contacts/contacts-query-parameters
 type GetContactsOptions struct {
-	MaxResults uint `query:"max-results"`
-	StartIndex uint `query:"start-index"`
-	// TODO: UpdatedMin time.Time `query:"updated-min"`
+	MaxResults uint      `query:"max-results"`
+	StartIndex uint      `query:"start-index"`
+	UpdatedMin time.Time `query:"updated-min"`
 	// TODO: OrderBy string `query:"orderby"`
-	// TODO: ShowDeleted bool `query:"showdeleted"`
+	ShowDeleted bool `query:"showdeleted"`
 	// TODO: SortOrder string `query:"sortorder"`
 }
 
@@ -82,6 +83,12 @@ func (c *Client) GetContacts(ctx context.Context, GetContactsOptions GetContacts
 	}
 	if GetContactsOptions.StartIndex > 0 {
 		values.Add("start-index", strconv.Itoa(int(GetContactsOptions.StartIndex)))
+	}
+	if !GetContactsOptions.UpdatedMin.IsZero() {
+		values.Add("updated-min", GetContactsOptions.UpdatedMin.Format(time.RFC3339))
+	}
+	if GetContactsOptions.ShowDeleted {
+		values.Add("showdeleted", "true")
 	}
 
 	nextPageURL := "https://www.google.com/m8/feeds/contacts/" + c.config.Domain + "/full"
