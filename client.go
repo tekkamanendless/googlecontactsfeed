@@ -103,6 +103,7 @@ func (c *Client) GetContacts(ctx context.Context, GetContactsOptions GetContacts
 				return fmt.Errorf("could not create request: %w", err)
 			}
 
+			request.Header.Set("GData-Version", "3.0")
 			if c.config.AccessToken != "" {
 				request.Header.Set("Authorization", "Bearer "+c.config.AccessToken)
 			}
