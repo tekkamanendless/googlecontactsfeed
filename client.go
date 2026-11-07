@@ -2,6 +2,7 @@ package googlecontactsfeed
 
 import (
 	"context"
+	"encoding/json"
 	"encoding/xml"
 	"fmt"
 	"io"
@@ -10,6 +11,8 @@ import (
 	"net/url"
 	"strconv"
 	"time"
+
+	"github.com/tekkamanendless/httperror"
 )
 
 // Client is a client for the legacy Google Contacts API.
@@ -63,12 +66,19 @@ func WithHTTPClient(httpClient *http.Client) ClientOption {
 //
 // See: https://developers.google.com/workspace/admin/domain-shared-contacts/contacts-query-parameters
 type GetContactsOptions struct {
-	MaxResults uint      `query:"max-results"`
-	StartIndex uint      `query:"start-index"`
-	UpdatedMin time.Time `query:"updated-min"`
-	// TODO: OrderBy string `query:"orderby"`
-	ShowDeleted bool `query:"showdeleted"`
-	// TODO: SortOrder string `query:"sortorder"`
+	MaxResults  uint      `query:"max-results"`
+	StartIndex  uint      `query:"start-index"`
+	UpdatedMin  time.Time `query:"updated-min"`
+	OrderBy     string    `query:"orderby"`
+	ShowDeleted bool      `query:"showdeleted"`
+	SortOrder   string    `query:"sortorder"`
+}
+
+// ErrorResponse is the error response from the Google Contacts API.
+type ErrorResponse struct {
+	Code    int    `json:"code"`
+	Message string `json:"message"`
+	Status  string `json:"status"`
 }
 
 // GetContacts gets the contacts from the Google Contacts API.
@@ -87,8 +97,14 @@ func (c *Client) GetContacts(ctx context.Context, GetContactsOptions GetContacts
 	if !GetContactsOptions.UpdatedMin.IsZero() {
 		values.Add("updated-min", GetContactsOptions.UpdatedMin.Format(time.RFC3339))
 	}
+	if GetContactsOptions.OrderBy != "" {
+		values.Add("orderby", GetContactsOptions.OrderBy)
+	}
 	if GetContactsOptions.ShowDeleted {
 		values.Add("showdeleted", "true")
+	}
+	if GetContactsOptions.SortOrder != "" {
+		values.Add("sortorder", GetContactsOptions.SortOrder)
 	}
 
 	nextPageURL := "https://www.google.com/m8/feeds/contacts/" + c.config.Domain + "/full"
@@ -120,6 +136,15 @@ func (c *Client) GetContacts(ctx context.Context, GetContactsOptions GetContacts
 			}
 
 			slog.DebugContext(ctx, fmt.Sprintf("Body: %s", string(body)))
+
+			if response.StatusCode >= 400 {
+				var errorResponse ErrorResponse
+				err = json.Unmarshal(body, &errorResponse)
+				if err != nil {
+					return httperror.ErrorFromStatus(response.StatusCode)
+				}
+				return fmt.Errorf("%w: %s: %s", httperror.ErrorFromStatus(response.StatusCode), errorResponse.Status, errorResponse.Message)
+			}
 
 			var feed ContactFeed
 			err = xml.Unmarshal(body, &feed)
