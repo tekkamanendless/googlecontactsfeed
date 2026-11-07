@@ -76,14 +76,20 @@ type GetContactsOptions struct {
 
 // ErrorResponse is the error response from the Google Contacts API.
 type ErrorResponse struct {
-	Code    int    `json:"code"`
-	Message string `json:"message"`
-	Status  string `json:"status"`
+	Error struct {
+		Code    int    `json:"code"`
+		Message string `json:"message"`
+		Status  string `json:"status"`
+	} `json:"error"`
 }
 
 // GetContacts gets the contacts from the Google Contacts API.
 //
 // This handles pagination automatically.
+//
+// In the event of an HTTP error, you may use the `httperror` package to determine which kind.
+// For example:
+// - httperror.ErrAccessDenied
 func (c *Client) GetContacts(ctx context.Context, GetContactsOptions GetContactsOptions) ([]GoogleContact, error) {
 	var contacts []GoogleContact
 
