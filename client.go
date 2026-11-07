@@ -149,7 +149,7 @@ func (c *Client) GetContacts(ctx context.Context, GetContactsOptions GetContacts
 				if err != nil {
 					return httperror.ErrorFromStatus(response.StatusCode)
 				}
-				return fmt.Errorf("%w: %s: %s", httperror.ErrorFromStatus(response.StatusCode), errorResponse.Status, errorResponse.Message)
+				return fmt.Errorf("%w: %s: %s", httperror.ErrorFromStatus(response.StatusCode), errorResponse.Error.Status, errorResponse.Error.Message)
 			}
 
 			var feed ContactFeed
