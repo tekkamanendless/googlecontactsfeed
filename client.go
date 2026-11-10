@@ -1,6 +1,7 @@
 package googlecontactsfeed
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"encoding/xml"
@@ -81,6 +82,110 @@ type ErrorResponse struct {
 		Message string `json:"message"`
 		Status  string `json:"status"`
 	} `json:"error"`
+}
+
+// CreateContact creates a new contact in the Google Contacts API.
+func (c *Client) CreateContact(ctx context.Context, contact GoogleContact) error {
+	contents, err := xml.Marshal(contact)
+	if err != nil {
+		return fmt.Errorf("could not marshal contact: %w", err)
+	}
+	slog.DebugContext(ctx, fmt.Sprintf("Contents: %s", string(contents)))
+
+	payload := xml.Header + string(contents)
+	slog.DebugContext(ctx, fmt.Sprintf("Payload: %s", payload))
+
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://www.google.com/m8/feeds/contacts/"+c.config.Domain+"/full", bytes.NewReader([]byte(payload)))
+	if err != nil {
+		return fmt.Errorf("could not create request: %w", err)
+	}
+
+	request.Header.Set("GData-Version", "3.0")
+	if c.config.AccessToken != "" {
+		request.Header.Set("Authorization", "Bearer "+c.config.AccessToken)
+	}
+
+	response, err := c.config.HTTPClient.Do(request)
+	if err != nil {
+		return fmt.Errorf("could not do request: %w", err)
+	}
+	defer response.Body.Close()
+
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		return fmt.Errorf("could not read body: %w", err)
+	}
+	slog.DebugContext(ctx, fmt.Sprintf("Body: %s", string(body)))
+
+	if response.StatusCode >= 400 {
+		var errorResponse ErrorResponse
+		err = json.Unmarshal(body, &errorResponse)
+		if err != nil {
+			return httperror.ErrorFromStatus(response.StatusCode)
+		}
+		return fmt.Errorf("%w: %s: %s", httperror.ErrorFromStatus(response.StatusCode), errorResponse.Error.Status, errorResponse.Error.Message)
+	}
+
+	return nil
+}
+
+// DeleteContact deletes a contact from the Google Contacts API.
+//
+// If you have the edit URL, you can use the `DeleteContactByURL` method instead.
+func (c *Client) DeleteContact(ctx context.Context, contact GoogleContact) error {
+	deleteURL := ""
+	for _, link := range contact.Links {
+		if link.Rel == "edit" {
+			deleteURL = link.Href
+			break
+		}
+	}
+	if deleteURL == "" {
+		slog.WarnContext(ctx, fmt.Sprintf("Could not find delete URL for contact %s", contact.ID))
+		return nil
+	}
+
+	slog.InfoContext(ctx, fmt.Sprintf("Deleting contact %s at %s", contact.ID, deleteURL))
+	return c.DeleteContactByURL(ctx, deleteURL)
+}
+
+// DeleteContactByURL deletes a contact from the Google Contacts API by its edit URL.
+//
+// If you have a GoogleContact, you can use the `DeleteContact` method instead.
+func (c *Client) DeleteContactByURL(ctx context.Context, editURL string) error {
+	request, err := http.NewRequestWithContext(ctx, http.MethodDelete, editURL, nil)
+	if err != nil {
+		panic(fmt.Sprintf("Could not create request: %v", err))
+	}
+
+	request.Header.Set("GData-Version", "3.0")
+	if c.config.AccessToken != "" {
+		request.Header.Set("Authorization", "Bearer "+c.config.AccessToken)
+	}
+
+	response, err := c.config.HTTPClient.Do(request)
+	if err != nil {
+		return fmt.Errorf("could not do request: %w", err)
+	}
+	defer response.Body.Close()
+
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		return fmt.Errorf("could not read body: %w", err)
+	}
+
+	if response.StatusCode >= 400 {
+		var errorResponse ErrorResponse
+		err = json.Unmarshal(body, &errorResponse)
+		if err != nil {
+			return httperror.ErrorFromStatus(response.StatusCode)
+		}
+		return fmt.Errorf("%w: %s: %s", httperror.ErrorFromStatus(response.StatusCode), errorResponse.Error.Status, errorResponse.Error.Message)
+	}
+
+	slog.DebugContext(ctx, fmt.Sprintf("Body: %s", string(body)))
+	return nil
+
 }
 
 // GetContacts gets the contacts from the Google Contacts API.
