@@ -133,20 +133,13 @@ func (c *Client) CreateContact(ctx context.Context, contact GoogleContact) error
 //
 // If you have the edit URL, you can use the `DeleteContactByURL` method instead.
 func (c *Client) DeleteContact(ctx context.Context, contact GoogleContact) error {
-	deleteURL := ""
-	for _, link := range contact.Links {
-		if link.Rel == "edit" {
-			deleteURL = link.Href
-			break
-		}
-	}
-	if deleteURL == "" {
-		slog.WarnContext(ctx, fmt.Sprintf("Could not find delete URL for contact %s", contact.ID))
-		return nil
+	editURL := contact.EditURL()
+	if editURL == "" {
+		return fmt.Errorf("could not find edit URL for contact %s", contact.ID)
 	}
 
-	slog.InfoContext(ctx, fmt.Sprintf("Deleting contact %s at %s", contact.ID, deleteURL))
-	return c.DeleteContactByURL(ctx, deleteURL)
+	slog.InfoContext(ctx, fmt.Sprintf("Deleting contact %s at %s", contact.ID, editURL))
+	return c.DeleteContactByURL(ctx, editURL)
 }
 
 // DeleteContactByURL deletes a contact from the Google Contacts API by its edit URL.
@@ -281,4 +274,53 @@ func (c *Client) GetContacts(ctx context.Context, GetContactsOptions GetContacts
 		}
 	}
 	return contacts, nil
+}
+
+// PutContact updates a contact in the Google Contacts API.
+func (c *Client) PutContact(ctx context.Context, contact GoogleContact) error {
+	editURL := contact.EditURL()
+	if editURL == "" {
+		return fmt.Errorf("could not find edit URL for contact %s", contact.ID)
+	}
+
+	contents, err := xml.Marshal(contact)
+	if err != nil {
+		panic(fmt.Sprintf("Could not marshal contact: %v", err))
+	}
+	slog.DebugContext(ctx, fmt.Sprintf("Contents: %s", string(contents)))
+
+	payload := xml.Header + string(contents)
+	slog.DebugContext(ctx, fmt.Sprintf("Payload: %s", payload))
+
+	request, err := http.NewRequestWithContext(ctx, http.MethodPut, editURL, bytes.NewReader([]byte(payload)))
+	if err != nil {
+		return fmt.Errorf("could not create request: %w", err)
+	}
+
+	request.Header.Set("GData-Version", "3.0")
+	if c.config.AccessToken != "" {
+		request.Header.Set("Authorization", "Bearer "+c.config.AccessToken)
+	}
+
+	response, err := c.config.HTTPClient.Do(request)
+	if err != nil {
+		return fmt.Errorf("could not do request: %w", err)
+	}
+	defer response.Body.Close()
+
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		return fmt.Errorf("could not read body: %w", err)
+	}
+
+	if response.StatusCode >= 400 {
+		var errorResponse ErrorResponse
+		err = json.Unmarshal(body, &errorResponse)
+		if err != nil {
+			return httperror.ErrorFromStatus(response.StatusCode)
+		}
+		return fmt.Errorf("%w: %s: %s", httperror.ErrorFromStatus(response.StatusCode), errorResponse.Error.Status, errorResponse.Error.Message)
+	}
+
+	return nil
 }

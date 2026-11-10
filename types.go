@@ -39,6 +39,18 @@ type GoogleContact struct {
 	GDExtendedProperties []ExtendedProperty `xml:"http://schemas.google.com/g/2005 extendedProperty"`
 }
 
+// EditURL returns the edit URL for the contact.
+//
+// This URL can be used to update or delete the contact.
+func (c *GoogleContact) EditURL() string {
+	for _, link := range c.Links {
+		if link.Rel == "edit" {
+			return link.Href
+		}
+	}
+	return ""
+}
+
 type Link struct {
 	Rel  string `xml:"rel,attr"`
 	Type string `xml:"type,attr"`
